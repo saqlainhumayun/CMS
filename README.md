@@ -1,72 +1,46 @@
 <?php
+session_start();
+
 // Initialize error messages
-$errors = [];
+$error = '';
 
-// Handle form submission
+// Handle login form submission
 if ($_SERVER['REQUEST_METHOD'] == 'POST') {
-    // Get and sanitize inputs
     $username = trim($_POST['username']);
-    $email = trim($_POST['email']);
     $password = $_POST['password'];
-    $first_name = trim($_POST['first_name']);
-    $last_name = trim($_POST['last_name']);
 
-    // Validate first and last name
-    if (!preg_match("/^[a-zA-Z]+$/", $first_name)) {
-        $errors[] = "First name should contain alphabets only.";
-    }
-    if (!preg_match("/^[a-zA-Z]+$/", $last_name)) {
-        $errors[] = "Last name should contain alphabets only.";
+    // Connect to the database
+    $conn = new mysqli('localhost', 'root', '', 'edusphere_cms');
+
+    // Check connection
+    if ($conn->connect_error) {
+        die("Connection failed: " . $conn->connect_error);
     }
 
-    // Validate username
-    if (!preg_match("/^[a-zA-Z0-9]+$/", $username)) {
-        $errors[] = "Username must contain both alphabets and numbers.";
-    }
+    // Fetch user by username
+    $stmt = $conn->prepare("SELECT password_hash FROM users WHERE username = ?");
+    $stmt->bind_param("s", $username);
+    $stmt->execute();
+    $stmt->store_result();
 
-    // Validate email
-    if (!filter_var($email, FILTER_VALIDATE_EMAIL)) {
-        $errors[] = "Invalid email format.";
-    }
+    if ($stmt->num_rows > 0) {
+        $stmt->bind_result($password_hash);
+        $stmt->fetch();
 
-    // Validate password
-    if (!preg_match("/^(?=.*[a-z])(?=.*[A-Z])(?=.*\d)(?=.*[\W_]).{8,}$/", $password)) {
-        $errors[] = "Password must include at least one uppercase letter, one lowercase letter, one number, and one special character.";
-    }
-
-    // If no errors, insert into database
-    if (empty($errors)) {
-        $password_hash = password_hash($password, PASSWORD_BCRYPT);
-
-        // Connect to the database
-        $conn = new mysqli('localhost', 'root', '', 'edusphere_cms');
-
-        // Check connection
-        if ($conn->connect_error) {
-            die("Connection failed: " . $conn->connect_error);
-        }
-
-        // Prepare and bind
-        $stmt = $conn->prepare("INSERT INTO users (username, email, password_hash, first_name, last_name) VALUES (?, ?, ?, ?, ?)");
-
-        if (!$stmt) {
-            die("Preparation failed: " . $conn->error);
-        }
-
-        $stmt->bind_param("sssss", $username, $email, $password_hash, $first_name, $last_name);
-
-        if ($stmt->execute()) {
-            echo "<p style='color: green; text-align: center;'>Signup successful! Redirecting to login...</p>";
-            $stmt->close(); // Close the statement after execution
-            $conn->close(); // Close the database connection
-            header("refresh:3; url=login.php"); // Redirect to login page
+        // Verify password
+        if (password_verify($password, $password_hash)) {
+            $_SESSION['username'] = $username; // Store session
+            header("Location: home.php"); // Redirect to dashboard
             exit;
         } else {
-            echo "<p style='color: red; text-align: center;'>Error: " . htmlspecialchars($stmt->error) . "</p>";
-            $stmt->close();
-            $conn->close();
+            $error = "Wrong information. Please try again.";
         }
+    } else {
+        $error = "Wrong information. Please try again.";
     }
+
+    $stmt->close();
+    $conn->close();
 }
 ?>
 
@@ -75,7 +49,7 @@ if ($_SERVER['REQUEST_METHOD'] == 'POST') {
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Signup - EduSphere CMS</title>
+    <title>Login - EduSphere CMS</title>
     <style>
         body {
             font-family: Arial, sans-serif;
@@ -88,7 +62,7 @@ if ($_SERVER['REQUEST_METHOD'] == 'POST') {
             align-items: center;
             height: 100vh;
         }
-        .signup-container {
+        .login-container {
             background-color: #ffffff;
             padding: 30px;
             border-radius: 8px;
@@ -132,45 +106,27 @@ if ($_SERVER['REQUEST_METHOD'] == 'POST') {
         button:hover {
             background-color: #357abd;
         }
-        .error-messages {
+        .error-message {
             color: red;
             margin-bottom: 20px;
-        }
-        .error-messages ul {
-            padding: 0;
-            list-style-type: none;
+            text-align: center;
         }
     </style>
 </head>
 <body>
-    <div class="signup-container">
-        <h2>Create an Account</h2>
-        <?php if (!empty($errors)) : ?>
-            <div class="error-messages">
-                <ul>
-                    <?php foreach ($errors as $error) : ?>
-                        <li><?php echo htmlspecialchars($error); ?></li>
-                    <?php endforeach; ?>
-                </ul>
-            </div>
+    <div class="login-container">
+        <h2>Login</h2>
+        <?php if ($error) : ?>
+            <p class="error-message"><?php echo htmlspecialchars($error); ?></p>
         <?php endif; ?>
         <form method="POST" action="">
-            <label for="first_name">First Name:</label>
-            <input type="text" name="first_name" id="first_name" required>
-
-            <label for="last_name">Last Name:</label>
-            <input type="text" name="last_name" id="last_name" required>
-
             <label for="username">Username:</label>
             <input type="text" name="username" id="username" required>
-
-            <label for="email">Email:</label>
-            <input type="email" name="email" id="email" required>
 
             <label for="password">Password:</label>
             <input type="password" name="password" id="password" required>
 
-            <button type="submit">Signup</button>
+            <button type="submit">Login</button>
         </form>
     </div>
 </body>
